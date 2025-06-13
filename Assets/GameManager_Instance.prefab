@@ -48,7 +48,8 @@ MonoBehaviour:
   syncDirection: 0
   syncMode: 0
   syncInterval: 0
-  targetScore: 72
+  targetScore: 1000
+  handSize: 6
   currentPlayerNetId: 0
   winnerNetId: 0
 --- !u!114 &5002693622251613749

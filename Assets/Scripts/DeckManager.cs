@@ -1,16 +1,15 @@
 using UnityEngine;
 using System.Collections.Generic;
-using System.Linq; // 用于OrderBy
-using Mirror; // 如果需要[Server]等属性
+using System.Linq;
+using Mirror;
 
-public class DeckManager : NetworkBehaviour // 继承NetworkBehaviour以使用[Server]等
+public class DeckManager : NetworkBehaviour 
 {
     public static DeckManager Instance { get; private set; }
 
     [Header("Card Data Assets")]
-    public List<PlayingCardData> masterDeckData = new List<PlayingCardData>(); // 在Inspector中拖入所有52张PlayingCardData资源
+    public List<PlayingCardData> masterDeckData = new List<PlayingCardData>(); 
 
-    // 服务器端的当前牌库 (不需要同步给客户端)
     private List<PlayingCardData> serverDeck = new List<PlayingCardData>();
 
     void Awake()
@@ -25,7 +24,7 @@ public class DeckManager : NetworkBehaviour // 继承NetworkBehaviour以使用[S
         }
     }
 
-    public override void OnStartServer() // 只在服务器启动时执行
+    public override void OnStartServer() 
     {
         base.OnStartServer();
         InitializeDeck();
@@ -33,7 +32,7 @@ public class DeckManager : NetworkBehaviour // 继承NetworkBehaviour以使用[S
         Debug.Log($"[Server] Deck Initialized with {serverDeck.Count} cards.");
     }
 
-    [Server] // 确保这些操作只在服务器上执行
+    [Server] 
     public void InitializeDeck()
     {
         serverDeck.Clear();
@@ -46,7 +45,7 @@ public class DeckManager : NetworkBehaviour // 继承NetworkBehaviour以使用[S
     [Server]
     public void ShuffleDeck()
     {
-        // 简单的Fisher-Yates洗牌算法
+        // Fisher-Yates
         System.Random rng = new System.Random();
         int n = serverDeck.Count;
         while (n > 1)
@@ -66,7 +65,6 @@ public class DeckManager : NetworkBehaviour // 继承NetworkBehaviour以使用[S
         if (serverDeck.Count == 0)
         {
             Debug.LogWarning("[Server] Deck is empty! Cannot draw card. Consider reshuffling discard pile or ending game phase.");
-            // 在这里可以加入重新洗牌弃牌堆的逻辑，或者发布牌库耗尽事件
             // EventManager.Instance.Publish(new DeckExhaustedEvent());
             return null;
         }
@@ -89,13 +87,12 @@ public class DeckManager : NetworkBehaviour // 继承NetworkBehaviour以使用[S
             }
             else
             {
-                break; // 牌库没牌了
+                break;
             }
         }
         return drawnCards;
     }
 
-    // (可选) 服务器重置并重洗牌库的方法
     [Server]
     public void ResetAndShuffleDeck()
     {

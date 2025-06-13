@@ -3,10 +3,6 @@ using UnityEngine.UI;
 using TMPro;
 using Mirror;
 
-/// <summary>
-/// UI总控制器。
-/// 负责更新游戏内HUD（分数、回合），也负责切换主UI面板（主菜单、游戏界面、结束界面）。
-/// </summary>
 public class GameHUDController : MonoBehaviour
 {
     public static GameHUDController Instance { get; private set; }
@@ -20,7 +16,8 @@ public class GameHUDController : MonoBehaviour
     public TMP_Text myExactScoreText;
     public Slider opponentScoreSlider;
     public TMP_Text TurnDisplayText;
-    
+    public TMP_Text targetScoreText;
+    public TMP_Text selectedHandInfoText;
     [Header("Game Over UI References")]
     public TMP_Text ResultText;
     public Button BackButton;
@@ -36,25 +33,19 @@ public class GameHUDController : MonoBehaviour
 
     void Start()
     {
-        // 为“返回”按钮添加点击事件监听器
         if (BackButton != null)
         {
             BackButton.onClick.AddListener(OnBackButtonClicked);
         }
-        // 游戏启动时，默认只显示主菜单
         ShowMainMenuPanel();
     }
 
-    /// <summary>
-    /// 当“返回”按钮被点击时调用。
-    /// </summary>
+
     private void OnBackButtonClicked()
     {
-        // 按钮的职责现在非常纯粹：只负责发起“停止”的指令。
         if (NetworkServer.active && NetworkClient.isConnected)
         {
             NetworkManager.singleton.StopHost();
-            // 同样，停止主机后的UI重置也应该放在 OnStopServer 中处理，以保持一致性。
         }
         else if (NetworkClient.isConnected)
         {
@@ -64,9 +55,6 @@ public class GameHUDController : MonoBehaviour
 
     #region Panel Switching Methods
 
-    /// <summary>
-    /// 只显示主菜单，隐藏其他所有面板。
-    /// </summary>
     public void ShowMainMenuPanel()
     {
         MainMenuPanel?.SetActive(true);
@@ -74,19 +62,17 @@ public class GameHUDController : MonoBehaviour
         GameOverPanel?.SetActive(false);
     }
 
-    /// <summary>
-    /// 只显示游戏界面，隐藏其他所有面板。
-    /// </summary>
     public void ShowCardPlayPanel()
     {
         MainMenuPanel?.SetActive(false);
         CardPlayPanel?.SetActive(true);
         GameOverPanel?.SetActive(false);
+        if (targetScoreText != null && GameManager.Instance != null)
+        {
+            targetScoreText.text = $"Aim Score: {GameManager.Instance.targetScore}";
+        }
     }
 
-    /// <summary>
-    /// 显示游戏结束界面。
-    /// </summary>
     public void ShowGameOverScreen(bool didIWin)
     {
         MainMenuPanel?.SetActive(false);
@@ -122,9 +108,18 @@ public class GameHUDController : MonoBehaviour
 
     public void UpdateTurnDisplay(string text)
     {
-        if(TurnDisplayText != null)
+        if (TurnDisplayText != null)
         {
             TurnDisplayText.text = text;
+        }
+    }
+
+    public void UpdateSelectedHandInfo(string info)
+    {
+        if (selectedHandInfoText != null)
+        {
+            selectedHandInfoText.gameObject.SetActive(!string.IsNullOrEmpty(info));
+            selectedHandInfoText.text = info;
         }
     }
     

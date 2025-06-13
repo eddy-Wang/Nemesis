@@ -16,6 +16,7 @@ public class GameManager : NetworkBehaviour
 
     [Header("Game Settings")]
     public int targetScore = 1000;
+    public int handSize = 6;
 
     [Header("Game State")]
     [SyncVar(hook = nameof(OnGameStateChanged))]
@@ -35,6 +36,7 @@ public class GameManager : NetworkBehaviour
     void Awake()
     {
         if (Instance == null) Instance = this; else Destroy(gameObject);
+        InitializeHandScores();
     }
 
     public override void OnStartServer()
@@ -45,7 +47,7 @@ public class GameManager : NetworkBehaviour
         currentPlayerNetId = 0;
         currentPlayerIndex = -1;
         winnerNetId = 0;
-        InitializeHandScores();
+        // InitializeHandScores();
     }
     #endregion
 
@@ -81,7 +83,7 @@ public class GameManager : NetworkBehaviour
 
         foreach (PlayerNetObject player in gamePlayers)
         {
-            List<PlayingCardData> drawnCardsData = DeckManager.Instance.DrawMultipleCards(5);
+            List<PlayingCardData> drawnCardsData = DeckManager.Instance.DrawMultipleCards(handSize);
             List<NetworkPlayingCard> netCardsToDeal = new List<NetworkPlayingCard>();
             foreach (var cardData in drawnCardsData)
             {
@@ -112,10 +114,20 @@ public class GameManager : NetworkBehaviour
         Debug.Log($"[Server] Player {playingPlayer.netId} played a {handType}, gained {scoreGained} score. Total score: {playingPlayer.score}");
         CheckForWinner();
         if (currentGameState == GameState.GameInProgress) EndTurn();
-    }    [Server]
+    }
+
+    [Server]
+    public void ProcessPlayerDiscard(PlayerNetObject discardingPlayer)
+    {
+        if (currentGameState != GameState.GameInProgress || discardingPlayer.netId != currentPlayerNetId) return;
+
+        Debug.Log($"[Server] Player {discardingPlayer.netId} discarded cards. Their turn now ends.");
+        EndTurn();
+    }
+
+    [Server]
     private int CalculateScore(PokerHandType handType, List<NetworkPlayingCard> playedCards)
     {
-        // ... (这部分代码保持不变)
         if (!handScores.TryGetValue(handType, out HandScoreData scoreData)) return 0;
         int totalChips = scoreData.baseChips;
         totalChips += GetScoringCardsChipValue(handType, playedCards);
@@ -129,7 +141,6 @@ public class GameManager : NetworkBehaviour
     }
     private int GetCardChipValue(CardRank rank)
     {
-        // ... (这部分代码保持不变)
         switch (rank)
         {
             case CardRank.Ace: return 11;
@@ -141,7 +152,6 @@ public class GameManager : NetworkBehaviour
     }
     private int GetScoringCardsChipValue(PokerHandType handType, List<NetworkPlayingCard> playedCards)
     {
-        // ... (这部分代码保持不变)
         int chips = 0;
         var rankGroups = playedCards.GroupBy(card => card.rank).OrderByDescending(g => g.Count()).ThenByDescending(g => g.Key).ToList();
         switch (handType)
@@ -185,7 +195,6 @@ public class GameManager : NetworkBehaviour
         else if (scorePercentage >= 0.5f) newTier = 2;
         else if (scorePercentage >= 0.25f) newTier = 1;
 
-        // 这里更新的 player.scoreTier 也是一个SyncVar，所以变化会自动同步
         player.scoreTier = newTier;
     }
     [Server]
@@ -198,7 +207,6 @@ public class GameManager : NetworkBehaviour
     [Server]
     public void EndTurn()
     {
-        // ... (这部分代码保持不变)
         if (currentGameState != GameState.GameInProgress || gamePlayers.Count < 2) return;
         currentPlayerIndex = (currentPlayerIndex + 1) % gamePlayers.Count;
         PlayerNetObject nextPlayer = gamePlayers[currentPlayerIndex];
@@ -206,10 +214,9 @@ public class GameManager : NetworkBehaviour
         else { Debug.LogError($"[Server] EndTurn: Next player at index {currentPlayerIndex} is null!"); }
     }
 
-    [Server]
+
     void InitializeHandScores()
     {
-        // ... (这部分代码保持不变)
         handScores = new Dictionary<PokerHandType, HandScoreData>
         {
             { PokerHandType.HighCard, new HandScoreData { baseChips = 5, multiplier = 1 } },
@@ -224,12 +231,17 @@ public class GameManager : NetworkBehaviour
         };
     }
 
+    public HandScoreData GetHandScoreData(PokerHandType handType)
+    {
+        if (handScores != null && handScores.TryGetValue(handType, out HandScoreData data))
+        {
+            return data;
+        }
+        return new HandScoreData { baseChips = 0, multiplier = 0 };
+    }
     #endregion
     
     #region Player Management
-    /// <summary>
-    /// 【已修复】修正了方法签名，以匹配 MyNetworkManager 的调用。
-    /// </summary>
     [Server]
     public void RegisterPlayer(PlayerNetObject playerNetObj, NetworkConnectionToClient conn)
     {
@@ -238,7 +250,6 @@ public class GameManager : NetworkBehaviour
         {
             gamePlayers.Add(playerNetObj);
             playerNetObj.playerNumber = gamePlayers.Count;
-            // 使用 conn.connectionId 可以方便地在服务器日志中追踪是哪个连接的玩家
             Debug.Log($"[Server] Player object (netId: {playerNetObj.netId}, connId: {conn.connectionId}) registered as Player {playerNetObj.playerNumber}. Total players: {gamePlayers.Count}");
             if (gamePlayers.Count == 2 && currentGameState == GameState.WaitingForPlayers)
             {
@@ -266,9 +277,6 @@ public class GameManager : NetworkBehaviour
     #endregion
 
     #region Client-Side Hooks
-    /// <summary>
-    /// 当游戏状态变化时，在所有客户端上调用此方法来切换UI主面板。
-    /// </summary>
     void OnGameStateChanged(GameState oldState, GameState newState)
     {
         if (GameHUDController.Instance == null) return;
@@ -288,9 +296,6 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// 当游戏结束状态变化时调用。
-    /// </summary>
     void OnGameOverStateChanged(uint oldWinnerId, uint newWinnerId)
     {
         if (newWinnerId == 0) return;
@@ -301,21 +306,23 @@ public class GameManager : NetworkBehaviour
         GameHUDController.Instance.ShowGameOverScreen(amITheWinner);
     }
 
-    /// <summary>
-    /// 当当前回合玩家变化时，更新UI显示。
-    /// </summary>
     void OnCurrentPlayerNetIdChanged(uint oldPlayerNetId, uint newPlayerNetId)
     {
-        if (GameHUDController.Instance == null) return;
-
-        if (newPlayerNetId == 0)
+        Debug.Log($"[GameManager Hook] OnCurrentPlayerNetIdChanged fired on CLIENT. New netId: {newPlayerNetId}");
+        if (GameHUDController.Instance == null)
         {
+            Debug.LogError("[GameManager Hook] GameHUDController.Instance is NULL at this point! Cannot update turn display.");
+            return;
+        }
+        if (newPlayerNetId == 0)
+        {  
             GameHUDController.Instance.UpdateTurnDisplay("Game Over");
             return;
         }
 
         bool isMyTurn = NetworkClient.localPlayer.netId == newPlayerNetId;
         string turnText = isMyTurn ? "Your Turn" : "Opponent's Turn";
+
         GameHUDController.Instance.UpdateTurnDisplay(turnText);
     }
     #endregion

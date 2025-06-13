@@ -5,7 +5,6 @@ using System.Linq;
 
 public class PlayerNetObject : NetworkBehaviour
 {
-    // --- 同步变量 ---
     [SyncVar(hook = nameof(OnPlayerNumberChanged))]
     public int playerNumber = 0;
 
@@ -15,39 +14,32 @@ public class PlayerNetObject : NetworkBehaviour
     [SyncVar(hook = nameof(OnScoreTierChanged))]
     public int scoreTier = 0;
 
-    // --- 服务器端权威数据 ---
     [System.NonSerialized]
     public List<NetworkPlayingCard> Server_AuthoritativeHand;
 
-    // --- 客户端本地数据 ---
     public readonly List<PlayingCardData> Client_LocalHand = new List<PlayingCardData>();
     public event System.Action Client_OnHandUpdated;
 
-    #region Mirror生命周期函数
+    #region Mirror Life cycle function
     public override void OnStartServer()
     {
         base.OnStartServer();
         Server_AuthoritativeHand = new List<NetworkPlayingCard>();
         score = 0;
         scoreTier = 0;
-        Debug.Log($"[Server] PlayerNetObject {netId} OnStartServer: 数据已初始化。");
+        Debug.Log($"[Server] PlayerNetObject {netId} OnStartServer: Data initialized.");
     }
 
     public override void OnStartClient()
     {
         base.OnStartClient();
         Client_LocalHand.Clear();
-        Debug.Log($"[Client] PlayerNetObject {netId} OnStartClient: 本地手牌已清空。");
-        // --- 新增代码在这里 ---
-        // OnStartClient 是初始化客户端UI的最佳时机，
-        // 因为 SyncVar 的 hook 在对象初次生成时可能不会触发。
-        // 我们在这里用 score 的初始值主动更新一次UI。
+        Debug.Log($"[Client] PlayerNetObject {netId} OnStartClient: Local hand cards cleared.");
         if (isLocalPlayer)
         {
             GameHUDController.Instance?.UpdateMyScoreDisplay(score);
-            // 如果你还有自己的进度条UI，也在这里初始化
         }
-        else // 这是对手的玩家对象
+        else
         {
             GameHUDController.Instance?.UpdateOpponentScoreTierDisplay(scoreTier);
         }
@@ -62,7 +54,7 @@ public class PlayerNetObject : NetworkBehaviour
     {
         base.OnStartLocalPlayer();
         gameObject.name = $"LocalPlayer_{netId}";
-        Debug.Log($"我是本地玩家! 我的 netId 是: {netId}. 我的玩家编号是: {playerNumber}");
+        Debug.Log($"I am the local player! My netId is: {netId}. My player number is: {playerNumber}");
     }
     #endregion
 
@@ -71,7 +63,7 @@ public class PlayerNetObject : NetworkBehaviour
     {
         if (isLocalPlayer)
         {
-            Debug.Log($"[My Client] 我的分数从 {oldScore} 变成了 {newScore}");
+            Debug.Log($"[My Client] My score changed from {oldScore} to {newScore}");
             GameHUDController.Instance?.UpdateMyScoreDisplay(newScore);
         }
     }
@@ -80,7 +72,7 @@ public class PlayerNetObject : NetworkBehaviour
     {
         if (!isLocalPlayer)
         {
-            Debug.Log($"[My Client] 对手的进度条从 {oldTier} 变成了 {newTier}");
+            Debug.Log($"[My Client] Opponent's progress bar changed from {oldTier} to {newTier}");
             GameHUDController.Instance?.UpdateOpponentScoreTierDisplay(newTier);
         }
     }
@@ -98,26 +90,26 @@ public class PlayerNetObject : NetworkBehaviour
     }
     #endregion
 
-    #region 服务器端指令与客户端RPC
+    #region Server commands and client RPCs
 
     /// <summary>
-    /// 【已添加回来】这个方法由GameManager在服务器上调用，用于分发初始手牌。
+    /// [Added back] This method is called by GameManager on the server to deal initial hand cards.
     /// </summary>
     [Server]
     public void Server_DealInitialHand(List<NetworkPlayingCard> initialCards)
     {
         Server_AuthoritativeHand.Clear();
         Server_AuthoritativeHand.AddRange(initialCards);
-        Debug.Log($"[Server] 玩家 {netId} 的权威手牌已设置，数量: {initialCards.Count}。");
+        Debug.Log($"[Server] Player {netId}'s authoritative hand set, count: {initialCards.Count}.");
 
-        // 调用TargetRpc，将手牌信息只发送给这个玩家所属的客户端
+        // Call TargetRpc to send hand information only to the client belonging to this player
         Target_ReceiveInitialHand(initialCards);
     }
 
     [TargetRpc]
     public void Target_ReceiveInitialHand(List<NetworkPlayingCard> initialNetCards)
     {
-        Debug.Log($"[Client {netId}] RPC: 收到初始手牌，数量: {initialNetCards?.Count ?? 0}。");
+        Debug.Log($"[Client {netId}] RPC: Received initial hand, count: {initialNetCards?.Count ?? 0}.");
         Client_LocalHand.Clear();
         if (initialNetCards != null)
         {
@@ -137,7 +129,7 @@ public class PlayerNetObject : NetworkBehaviour
     public void Target_AddCardsToClientHand(List<NetworkPlayingCard> netCards)
     {
         if (netCards == null || netCards.Count == 0) return;
-        Debug.Log($"[Client {netId}] RPC: 收到补牌，数量: {netCards.Count}。");
+        Debug.Log($"[Client {netId}] RPC: Received replenishment cards, count: {netCards.Count}.");
         foreach (var netCard in netCards)
         {
             PlayingCardData cardData = CardLibrary.Instance?.GetCardData(netCard);
@@ -153,7 +145,7 @@ public class PlayerNetObject : NetworkBehaviour
     public void Target_AcknowledgePlayAndRemoveCards(List<NetworkPlayingCard> playedNetCards)
     {
         if (playedNetCards == null || playedNetCards.Count == 0) return;
-        Debug.Log($"[Client {netId}] RPC: 确认出牌，移除 {playedNetCards.Count} 张牌。");
+        Debug.Log($"[Client {netId}] RPC: Acknowledged play, removing {playedNetCards.Count} cards.");
         bool handChanged = false;
         foreach (var netCardToRemove in playedNetCards)
         {
@@ -171,23 +163,27 @@ public class PlayerNetObject : NetworkBehaviour
     }
     #endregion
 
-    #region 客户端出牌指令
+    #region Client card playing instructions
     [Command]
     public void CmdPlayCards(List<NetworkPlayingCard> playedNetCards)
     {
         if (GameManager.Instance == null || GameManager.Instance.currentPlayerNetId != this.netId)
         {
-            Debug.LogWarning($"[Server] 玩家 {netId} 试图在非其回合出牌。");
+            Debug.LogWarning($"[Server] Player {netId} attempts to play cards in other turns");
             return;
         }
 
-        if (playedNetCards == null || playedNetCards.Count == 0) return;
+        if (playedNetCards == null || playedNetCards.Count == 0 || playedNetCards.Count > 5)
+        {
+            Debug.LogError($"[Server] Player {netId} sent an invalid number of cards to play: {playedNetCards?.Count ?? 0}.");
+            return;
+        }
 
         foreach (var playedCard in playedNetCards)
         {
             if (!Server_AuthoritativeHand.Contains(playedCard))
             {
-                Debug.LogError($"[Server] 玩家 {netId} 试图打出不存在的牌: {playedCard}。可能是作弊或状态不同步。");
+                Debug.LogError($"[Server] Player {netId} tried to play cards that don't exist: {playedCard}. Could be cheating or being out of sync");
                 Target_ReceiveInitialHand(new List<NetworkPlayingCard>(Server_AuthoritativeHand));
                 return;
             }
@@ -195,28 +191,74 @@ public class PlayerNetObject : NetworkBehaviour
 
         GameManager.Instance.ProcessPlayerPlay(this, playedNetCards);
 
-        foreach (var playedCard in playedNetCards)
-        {
-            Server_AuthoritativeHand.Remove(playedCard);
-        }
-
+        // Remove from server hand
+        foreach (var card in playedNetCards) { Server_AuthoritativeHand.Remove(card); }
         Target_AcknowledgePlayAndRemoveCards(playedNetCards);
 
-        int cardsToDraw = 5 - Server_AuthoritativeHand.Count;
+        // Replenish hand logic
+        ReplenishHand();
+    }
+
+    [Command]
+    public void CmdDiscardCards(List<NetworkPlayingCard> discardedNetCards)
+    {
+        // Validate turn
+        if (GameManager.Instance == null || GameManager.Instance.currentPlayerNetId != this.netId)
+        {
+            Debug.LogWarning($"[Server] Player {netId} attempts to discard cards not on their turn.");
+            return;
+        }
+
+        if (discardedNetCards == null || discardedNetCards.Count == 0 || discardedNetCards.Count > 5)
+        {
+            Debug.LogError($"[Server] Player {netId} sent an invalid number of cards to discard: {discardedNetCards?.Count ?? 0}.");
+            return;
+        }
+
+        // Validate card ownership
+        if (discardedNetCards == null || discardedNetCards.Count == 0) return;
+        foreach (var card in discardedNetCards)
+        {
+            if (!Server_AuthoritativeHand.Contains(card))
+            {
+                Debug.LogError($"[Server] Player {netId} tried to discard cards that don't exist: {card}.");
+                Target_ReceiveInitialHand(new List<NetworkPlayingCard>(Server_AuthoritativeHand)); // Force hand sync
+                return;
+            }
+        }
+
+        // Delegate turn end to GameManager
+        GameManager.Instance.ProcessPlayerDiscard(this);
+
+        // Server-side hand update
+        foreach (var card in discardedNetCards) { Server_AuthoritativeHand.Remove(card); }
+        Target_AcknowledgePlayAndRemoveCards(discardedNetCards);
+
+        // Replenish hand logic
+        ReplenishHand();
+    }
+
+    [Server]
+    private void ReplenishHand()
+    {
+        // --- Change point: Use GameManager's handSize ---
+        int cardsToDraw = GameManager.Instance.handSize - Server_AuthoritativeHand.Count;
         if (cardsToDraw > 0 && DeckManager.Instance != null)
         {
             List<PlayingCardData> drawnCardsData = DeckManager.Instance.DrawMultipleCards(cardsToDraw);
-            List<NetworkPlayingCard> netCardsToDeal = new List<NetworkPlayingCard>();
-            foreach (var cardData in drawnCardsData)
+            if (drawnCardsData.Count > 0)
             {
-                netCardsToDeal.Add(new NetworkPlayingCard(cardData.suit, cardData.rank));
+                // Convert PlayingCardData to NetworkPlayingCard
+                List<NetworkPlayingCard> netCardsToDeal = drawnCardsData.Select(data => new NetworkPlayingCard(data.suit, data.rank)).ToList();
+                // Update server authoritative hand
+                Server_AuthoritativeHand.AddRange(netCardsToDeal);
+                // RPC notify client to add new cards
+                Target_AddCardsToClientHand(netCardsToDeal);
             }
-            Server_AuthoritativeHand.AddRange(netCardsToDeal);
-            Target_AddCardsToClientHand(netCardsToDeal);
         }
     }
     #endregion
-    
+
     void OnDestroy()
     {
         Debug.Log($"[LIFECYCLE] PlayerNetObject with netId {netId} and playerNumber {playerNumber} is being DESTROYED.");

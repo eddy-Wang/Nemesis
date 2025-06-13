@@ -25,14 +25,13 @@ public class TurnDisplayUI : MonoBehaviour
         if (turnText == null)
         {
             Debug.LogError("TurnDisplayUI Start: turnText (TMP_Text) is not assigned!");
-            turnText = GetComponent<TMP_Text>(); // 尝试获取
-            if (turnText == null) return; // 如果还是没有，则无法工作
+            turnText = GetComponent<TMP_Text>();
+            if (turnText == null) return; 
         }
         turnText.text = "Waiting for game to start...";
         Debug.Log("TurnDisplayUI Start: Initial text set.");
 
-        // 尝试在Start时就从GameManager获取一次当前状态并更新，以防hook稍后才触发或初始值已设定
-        if (GameManager.Instance != null && NetworkClient.isConnected) // 只在客户端尝试更新
+        if (GameManager.Instance != null && NetworkClient.isConnected)
         {
             Debug.Log($"TurnDisplayUI Start: Attempting initial display update with GameManager.currentPlayerNetId = {GameManager.Instance.currentPlayerNetId}");
             DisplayTurn(GameManager.Instance.currentPlayerNetId);
@@ -64,14 +63,7 @@ public class TurnDisplayUI : MonoBehaviour
             if (NetworkClient.spawned.TryGetValue(currentPlayerNetId_FromServer, out NetworkIdentity opponentIdentity))
             {
                 PlayerNetObject opponentPlayerScript = opponentIdentity.GetComponent<PlayerNetObject>();
-                // 你可以根据 playerNumber 或其他自定义属性来显示更友好的名称
-                // if (opponentPlayerScript != null && opponentPlayerScript.playerNumber != 0)
-                // {
-                //    turnText.text = $"Player {opponentPlayerScript.playerNumber}'s Turn";
-                // } else
-                // {
                 turnText.text = $"Opponent's Turn (NetID: {currentPlayerNetId_FromServer})";
-                // }
             }
             else
             {

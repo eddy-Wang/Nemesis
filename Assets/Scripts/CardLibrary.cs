@@ -7,7 +7,7 @@ public class CardLibrary : MonoBehaviour
 {
     public static CardLibrary Instance { get; private set; }
 
-    public List<PlayingCardData> allCardDatas; // 在Inspector中拖入所有52个PlayingCardData资源
+    public List<PlayingCardData> allCardDatas;
 
     private Dictionary<System.Tuple<CardSuit, CardRank>, PlayingCardData> cardLookup;
 

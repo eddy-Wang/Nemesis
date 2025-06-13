@@ -6,10 +6,9 @@ public class PlayingCardData : ScriptableObject
 {
     public CardSuit suit;
     public CardRank rank;
-    public Sprite cardImage; // 用于链接您的PNG图片
-    public string cardName; // 例如 "Ace of Spades", "红桃K"
+    public Sprite cardImage;
+    public string cardName;
 
-    // 可选：用于牌型评估的数值，A可以特殊处理
     public int GetRankValue()
     {
         if (rank >= CardRank.Two && rank <= CardRank.Ten)
@@ -18,23 +17,20 @@ public class PlayingCardData : ScriptableObject
         }
         else if (rank >= CardRank.Jack && rank <= CardRank.King)
         {
-            return 10; // 或者 Jack=11, Queen=12, King=13, Ace=14/1 用于比较
+            return 10; 
         }
         else if (rank == CardRank.Ace)
         {
-            return 11; // 或者14，根据您的牌型比较规则
+            return 11;
         }
-        // else if (rank == CardRank.Joker_Small || rank == CardRank.Joker_Big) ...
-        return 0; // 默认或大小王
+        return 0; 
     }
 
-    void OnValidate() // 当在Inspector中修改值时自动更新cardName
+    void OnValidate() 
     {
         if (cardImage != null && string.IsNullOrEmpty(cardName))
         {
-            cardName = cardImage.name; // 尝试用图片文件名作为默认卡牌名
+            cardName = cardImage.name;
         }
-        // 你也可以根据suit和rank自动生成更规范的名称
-        // cardName = $"{rank} of {suit}";
     }
 }

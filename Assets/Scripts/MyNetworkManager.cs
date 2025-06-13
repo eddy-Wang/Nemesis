@@ -3,8 +3,6 @@ using UnityEngine;
 
 public class MyNetworkManager : NetworkManager
 {
-    // The reference to NetworkDiscovery has been completely removed from this script.
-    // Its responsibility is now solely to manage connections and players.
     [Header("Game Objects")]
     public GameObject gameManagerPrefab;
 
@@ -16,7 +14,6 @@ public class MyNetworkManager : NetworkManager
         base.OnStartServer();
         NetworkServer.RegisterHandler<RoomCodeMessage>(OnReceiveRoomCode);
 
-        // 2. 当服务器启动时，实例化并生成一个全新的GameManager
         if (gameManagerPrefab != null)
         {
             Debug.Log("[Server] Spawning GameManager...");
@@ -29,17 +26,13 @@ public class MyNetworkManager : NetworkManager
     {
         base.OnStopServer();
 
-        // 当服务器停止时（也就是Host返回主菜单时），
-        // 我们也用同样的方式重置UI。
         Debug.Log("[Manager] Server stopped. Resetting UI to Main Menu.");
 
-        // 1. 重置主菜单的逻辑状态和UI
         if (MainMenuController.Instance != null)
         {
             MainMenuController.Instance.ResetLobbyUI();
         }
 
-        // 2. 确保主菜单面板被显示
         if (GameHUDController.Instance != null)
         {
             GameHUDController.Instance.ShowMainMenuPanel();
@@ -61,17 +54,11 @@ public class MyNetworkManager : NetworkManager
     {
         base.OnStopClient();
 
-        // 当客户端停止时（无论是主动退出还是被踢出），
-        // 我们需要确保UI被重置到初始状态。
-        // 这是一个比在按钮点击时处理更可靠的地方。
-
-        // 1. 重置主菜单的逻辑状态和UI
         if (MainMenuController.Instance != null)
         {
             MainMenuController.Instance.ResetLobbyUI();
         }
 
-        // 2. 确保主菜单面板被显示
         if (GameHUDController.Instance != null)
         {
             GameHUDController.Instance.ShowMainMenuPanel();

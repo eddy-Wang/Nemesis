@@ -12,6 +12,5 @@ public enum PokerHandType
     Flush,
     FullHouse,
     FourOfAKind,
-    StraightFlush,
-    // RoyalFlush 可以在判断StraightFlush时特殊处理
+    StraightFlush
 }

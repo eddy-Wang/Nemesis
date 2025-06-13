@@ -18,7 +18,7 @@ public class CardUI : MonoBehaviour
 
     public Image cardArtImage;
 
-    public TMP_Text cardInfoText; // 可选，用于显示牌名等
+    public TMP_Text cardInfoText;
 
     public Button cardButton;
 
@@ -26,15 +26,15 @@ public class CardUI : MonoBehaviour
 
     private PlayingCardData _cardData;
 
-    private NetworkPlayingCard _networkCard; // 存储对应的NetworkPlayingCard，方便出牌时传递
+    private NetworkPlayingCard _networkCard;
 
-    private HandDisplayUI _handDisplayManager; // 用于通知手牌管理器它被选中了
+    private HandDisplayUI _handDisplayManager;
 
 
 
     public bool IsSelected { get; private set; }
 
-    public Image selectionIndicator; // 可选: 一个子Image，用于显示选中状态
+    public Image selectionIndicator;
 
 
 
@@ -56,7 +56,7 @@ public class CardUI : MonoBehaviour
 
             if (cardArtImage != null) cardArtImage.sprite = cardData.cardImage;
 
-            if (cardInfoText != null) cardInfoText.text = cardData.cardName; // 或 $"{cardData.rank} of {cardData.suit}"
+            if (cardInfoText != null) cardInfoText.text = cardData.cardName;
 
         }
 
@@ -66,7 +66,7 @@ public class CardUI : MonoBehaviour
 
 
 
-        cardButton.onClick.RemoveAllListeners(); // 清除旧监听器
+        cardButton.onClick.RemoveAllListeners();
 
         cardButton.onClick.AddListener(OnCardClicked);
 
@@ -92,7 +92,7 @@ public class CardUI : MonoBehaviour
 
         UpdateSelectionVisual();
 
-        _handDisplayManager.OnCardSelectionChanged(this, IsSelected);
+//         _handDisplayManager.OnCardSelectionChanged(this, IsSelected);
 
         Debug.Log($"Card clicked: {_cardData?.cardName}, Selected: {IsSelected}");
 
@@ -112,9 +112,7 @@ public class CardUI : MonoBehaviour
 
         }
 
-        // 或者改变背景色等
 
-        // GetComponent<Image>().color = IsSelected ? Color.yellow : Color.white;
 
     }
 

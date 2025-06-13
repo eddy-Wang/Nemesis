@@ -2,38 +2,67 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.UI;
 using Mirror;
-using System.Linq; // 用于 CmdPlayCards 的日志
+using System.Linq;
 
 public class HandDisplayUI : MonoBehaviour
 {
-    public GameObject cardUIPrefab; // 拖入您创建的 CardUIPrefab_Base
-    public Transform handContainer; // 拖入 PlayerHandPanel GameObject
-    public Button playSelectedButton; // 创建一个“出牌”按钮并链接到这里
+    public GameObject cardPrefab; 
+    public Transform handContainer;
+    public Button playSelectedButton;
+    public Button discardButton; 
 
     private PlayerNetObject _localPlayerNetObject;
-    private List<CardUI> _displayedCardUIs = new List<CardUI>();
-    private List<NetworkPlayingCard> _selectedCardsForPlay = new List<NetworkPlayingCard>();
+    private List<CardController> _displayedCardControllers = new List<CardController>();
+    private List<CardController> _selectedCardControllers = new List<CardController>();
 
     void Start()
     {
-        // 检查Inspector引用是否设置
-        if (playSelectedButton == null)
+        if (playSelectedButton != null)
         {
-            Debug.LogError("HandDisplayUI Start: PlaySelectedButton is not assigned in Inspector!");
+            playSelectedButton.onClick.AddListener(OnPlaySelectedCardsClicked);
+            playSelectedButton.gameObject.SetActive(false);
         }
         else
         {
-            playSelectedButton.onClick.AddListener(OnPlaySelectedCardsClicked);
-            playSelectedButton.gameObject.SetActive(false); // 初始隐藏
+            Debug.LogError("HandDisplayUI Start: PlaySelectedButton is not assigned in Inspector!");
         }
-
-        if (cardUIPrefab == null) Debug.LogError("HandDisplayUI Start: cardUIPrefab is not assigned in Inspector!");
-        if (handContainer == null) Debug.LogError("HandDisplayUI Start: handContainer is not assigned in Inspector!");
+        if (discardButton != null)
+        {
+            discardButton.onClick.AddListener(OnDiscardSelectedCardsClicked);
+        }
+        else
+        {
+            Debug.LogError("HandDisplayUI Start: DiscardButton is not assigned in Inspector!");
+        }
+        UpdateActionButtonsState();
+        if (cardPrefab == null) Debug.LogError("HandDisplayUI Start: Card Prefab is not assigned in Inspector!");
+        if (handContainer == null) Debug.LogError("HandDisplayUI Start: Hand Container is not assigned in Inspector!");
+    }
+    private void OnDiscardSelectedCardsClicked()
+    {
+        if (_localPlayerNetObject != null && _selectedCardControllers.Count > 0)
+        {
+            if (GameManager.Instance != null && GameManager.Instance.currentPlayerNetId == _localPlayerNetObject.netId)
+            {
+                List<NetworkPlayingCard> cardsToDiscard = _selectedCardControllers.Select(c => c.GetNetworkCard()).ToList();
+                _localPlayerNetObject.CmdDiscardCards(cardsToDiscard);
+                GameHUDController.Instance?.UpdateSelectedHandInfo("");
+            }
+            else
+            {
+                Debug.LogWarning("Not your turn to discard!");
+            }
+        }
     }
 
+    void UpdateActionButtonsState()
+    {
+        bool hasSelection = _selectedCardControllers.Count > 0;
+        playSelectedButton?.gameObject.SetActive(hasSelection);
+        discardButton?.gameObject.SetActive(hasSelection);
+    }
     void Update()
     {
-        // 使用Update来查找本地玩家，直到找到为止。这比Invoke更可靠。
         if (_localPlayerNetObject == null && NetworkClient.active && NetworkClient.localPlayer != null)
         {
             FindAndSubscribeToLocalPlayer();
@@ -42,26 +71,12 @@ public class HandDisplayUI : MonoBehaviour
 
     void FindAndSubscribeToLocalPlayer()
     {
-        Debug.Log("[Client HandDisplayUI] Attempting to find local player...");
-        if (NetworkClient.localPlayer != null)
+        _localPlayerNetObject = NetworkClient.localPlayer.GetComponent<PlayerNetObject>();
+        if (_localPlayerNetObject != null)
         {
-            Debug.Log($"[Client HandDisplayUI] Found NetworkClient.localPlayer with netId: {NetworkClient.localPlayer.netId}");
-            _localPlayerNetObject = NetworkClient.localPlayer.GetComponent<PlayerNetObject>();
-            if (_localPlayerNetObject != null)
-            {
-                Debug.Log($"[Client HandDisplayUI] Successfully got PlayerNetObject. Subscribing to OnHandUpdated. Initial Client_LocalHand count: {_localPlayerNetObject.Client_LocalHand.Count}");
-                _localPlayerNetObject.Client_OnHandUpdated -= UpdateHandDisplay; // 先移除，防止重复订阅
-                _localPlayerNetObject.Client_OnHandUpdated += UpdateHandDisplay;
-                UpdateHandDisplay(); // 订阅后立即刷新一次手牌显示
-            }
-            else
-            {
-                Debug.LogError("[Client HandDisplayUI] PlayerNetObject script NOT FOUND on local player object (NetworkClient.localPlayer)!");
-            }
-        }
-        else
-        {
-            Debug.LogWarning("[Client HandDisplayUI] NetworkClient.localPlayer is still NULL when FindAndSubscribeToLocalPlayer was called.");
+            _localPlayerNetObject.Client_OnHandUpdated -= UpdateHandDisplay;
+            _localPlayerNetObject.Client_OnHandUpdated += UpdateHandDisplay;
+            UpdateHandDisplay();
         }
     }
 
@@ -75,107 +90,111 @@ public class HandDisplayUI : MonoBehaviour
 
     void UpdateHandDisplay()
     {
-        if (_localPlayerNetObject == null || handContainer == null || cardUIPrefab == null)
-        {
-            Debug.LogError("[Client HandDisplayUI UpdateHandDisplay] A critical reference is null, cannot update display.");
-            return;
-        }
+        if (_localPlayerNetObject == null || handContainer == null || cardPrefab == null) return;
 
-        Debug.Log($"[Client HandDisplayUI UpdateHandDisplay] Called. Local player ({_localPlayerNetObject.netId}) hand count: {_localPlayerNetObject.Client_LocalHand.Count}");
 
-        // 清理旧的卡牌UI
         foreach (Transform child in handContainer)
         {
             Destroy(child.gameObject);
         }
-        _displayedCardUIs.Clear();
-        _selectedCardsForPlay.Clear();
-        UpdatePlayButtonState();
+        _displayedCardControllers.Clear();
+        _selectedCardControllers.Clear();
+        UpdateActionButtonsState();
 
-        if (_localPlayerNetObject.Client_LocalHand.Count == 0)
-        {
-            Debug.Log("[Client HandDisplayUI UpdateHandDisplay] No cards in local hand to display.");
-        }
 
-        // 为手牌中的每张牌创建新的UI实例
         foreach (PlayingCardData cardData in _localPlayerNetObject.Client_LocalHand)
         {
-            if (cardData == null)
-            {
-                Debug.LogWarning("[Client HandDisplayUI UpdateHandDisplay] Encountered a null cardData in local hand list.");
-                continue;
-            }
-            Debug.Log($"[Client HandDisplayUI UpdateHandDisplay] Instantiating card UI for: {cardData.cardName}");
-            GameObject cardGO = Instantiate(cardUIPrefab, handContainer);
-            CardUI cardUIComponent = cardGO.GetComponent<CardUI>();
-            if (cardUIComponent != null)
+            if (cardData == null) continue;
+
+
+            GameObject cardGO = Instantiate(cardPrefab, handContainer);
+            CardController cardController = cardGO.GetComponent<CardController>();
+            
+            if (cardController != null)
             {
                 NetworkPlayingCard netCard = new NetworkPlayingCard(cardData.suit, cardData.rank);
-                cardUIComponent.Initialize(cardData, netCard, this);
-                _displayedCardUIs.Add(cardUIComponent);
+                cardController.Initialize(cardData, netCard, this);
+                _displayedCardControllers.Add(cardController);
             }
             else
             {
-                Debug.LogError("[Client HandDisplayUI UpdateHandDisplay] Instantiated card prefab is missing CardUI component!");
+                Debug.LogError("[Client HandDisplayUI] Instantiated card prefab is missing CardController component!");
             }
         }
-        Debug.Log($"[Client HandDisplayUI UpdateHandDisplay] Finished instantiating {_displayedCardUIs.Count} card UIs.");
     }
 
-    public void OnCardSelectionChanged(CardUI cardUI, bool isSelected)
+    public void OnCardSelectionChanged(CardController cardController, bool isSelected)
     {
-        NetworkPlayingCard netCard = cardUI.GetNetworkCard();
         if (isSelected)
-        {
-            if (!_selectedCardsForPlay.Contains(netCard))
+        {   
+            if (_selectedCardControllers.Count >= 5)
             {
-                _selectedCardsForPlay.Add(netCard);
+                Debug.Log("Cannot select more than 5 cards.");
+                cardController.Deselect(); 
+                return;
+            }
+            if (!_selectedCardControllers.Contains(cardController))
+            {
+                _selectedCardControllers.Add(cardController);
             }
         }
         else
         {
-            _selectedCardsForPlay.Remove(netCard);
+            _selectedCardControllers.Remove(cardController);
         }
-        UpdatePlayButtonState();
-        Debug.Log($"Selected cards: {_selectedCardsForPlay.Count}");
+        UpdateActionButtonsState();
+        CalculateAndDisplaySelectedHandInfo();
     }
-
-    void UpdatePlayButtonState()
+    
+    private void CalculateAndDisplaySelectedHandInfo()
     {
-        if (playSelectedButton != null)
+        if (_selectedCardControllers.Count == 0)
         {
-            playSelectedButton.gameObject.SetActive(_selectedCardsForPlay.Count > 0);
+            GameHUDController.Instance?.UpdateSelectedHandInfo("");
+            return;
         }
+        List<NetworkPlayingCard> selectedNetCards = _selectedCardControllers.Select(c => c.GetNetworkCard()).ToList();
+
+        PokerHandType handType = PokerHandEvaluator.EvaluateHand(selectedNetCards);
+
+        HandScoreData scoreData = GameManager.Instance.GetHandScoreData(handType);
+
+        string handInfoText = $"{handType} (Chips: {scoreData.baseChips} x Mult: {scoreData.multiplier})";
+        
+        GameHUDController.Instance?.UpdateSelectedHandInfo(handInfoText);
     }
 
     void OnPlaySelectedCardsClicked()
     {
-        if (_localPlayerNetObject != null && _selectedCardsForPlay.Count > 0)
+        if (_localPlayerNetObject != null && _selectedCardControllers.Count > 0)
         {
             if (GameManager.Instance != null && GameManager.Instance.currentPlayerNetId == _localPlayerNetObject.netId)
             {
-                Debug.Log($"[UI] Attempting to play selected cards: {string.Join(", ", _selectedCardsForPlay)}");
-                _localPlayerNetObject.CmdPlayCards(new List<NetworkPlayingCard>(_selectedCardsForPlay));
+                List<NetworkPlayingCard> cardsToPlay = _selectedCardControllers.Select(c => c.GetNetworkCard()).ToList();
+
+                _localPlayerNetObject.CmdPlayCards(cardsToPlay);
+                GameHUDController.Instance?.UpdateSelectedHandInfo("");
             }
             else
             {
                 Debug.LogWarning("Not your turn to play!");
-                // 可以在此显示一个UI提示给玩家
             }
         }
     }
+
     public void ClearHandDisplay()
     {
-        Debug.Log("[Client HandDisplayUI] Clearing hand display.");
         foreach (Transform child in handContainer)
         {
             Destroy(child.gameObject);
         }
-        _displayedCardUIs.Clear();
-        _selectedCardsForPlay.Clear();
+        _displayedCardControllers.Clear();
+        _selectedCardControllers.Clear();
         if (playSelectedButton != null)
         {
             playSelectedButton.gameObject.SetActive(false);
         }
+        UpdateActionButtonsState();
+        GameHUDController.Instance?.UpdateSelectedHandInfo("");
     }
 }
